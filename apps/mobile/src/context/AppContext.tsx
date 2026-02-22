@@ -48,7 +48,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!active) return;
 
       if (error) {
-        // eslint-disable-next-line no-console
         console.warn('Anonymous sign-in failed', error.message);
         return;
       }
@@ -65,7 +64,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       active = false;
-      listener.subscription.unsubscribe();
+      listener?.subscription?.unsubscribe();
     };
   }, []);
 

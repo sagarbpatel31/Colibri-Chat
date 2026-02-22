@@ -1,7 +1,7 @@
-import { getCurrentLocation } from './location';
+import { getCurrentLocation, GeoLocation } from './location';
 import { heartbeat, HeartbeatResult, RpcError } from './rpc';
 
-export type HeartbeatHandler = (result: HeartbeatResult) => void;
+export type HeartbeatHandler = (result: HeartbeatResult, location: GeoLocation) => void;
 export type HeartbeatErrorHandler = (error: RpcError) => void;
 
 export type HeartbeatLoopOptions = {
@@ -32,7 +32,7 @@ export function startHeartbeatLoop(options: HeartbeatLoopOptions) {
       }
 
       if (data) {
-        options.onHeartbeat(data);
+        options.onHeartbeat(data, location);
       }
     } catch (error) {
       options.onError?.({
