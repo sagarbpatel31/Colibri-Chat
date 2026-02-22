@@ -1,12 +1,10 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-let supabase: SupabaseClient | null = null;
-
-export function getSupabase() {
-  if (!supabase) {
-    const url = process.env.SUPABASE_URL || '';
-    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || '';
-    supabase = createClient(url, key);
-  }
-  return { supabase };
+export function supabaseClient(req: Request) {
+    const url = Deno.env.get("SUPABASE_URL")!;
+    const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const authHeader = req.headers.get("Authorization") || "";
+    return createClient(url, anon, {
+    global: { headers: { Authorization: authHeader } },
+});
 }

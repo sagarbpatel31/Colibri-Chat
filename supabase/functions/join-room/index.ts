@@ -1,24 +1,24 @@
-import { getSupabase } from '../_shared/supabase';
+import { supabaseClient } from "../_shared/supabase.ts";
+import { json, err } from "../_shared/utils.ts";
 
-export default async function handler(req: Request) {
-  try {
-    const { roomId, userId } = await req.json();
-    const { supabase } = getSupabase();
+Deno.serve(async (req) => {
+    if (req.method !== "POST") return err("method_not_allowed", 405);
 
-    // simple place-holder: ensure room exists
-    const { data: room, error } = await supabase
-      .from('rooms')
-      .select('*')
-      .eq('id', roomId)
-      .single();
+    const supabase = supabaseClient(req);
+    const { room_id, lat, lng, accuracy_m } = await req.json().catch(() => ({}));
 
-    if (error || !room) {
-      return new Response(JSON.stringify({ error: 'Room not found' }), { status: 404 });
+    if (!room_id || typeof lat !== "number" || typeof lng !== "number") {
+    return err("invalid_payload");
     }
 
-    // In a real function we would insert presence or membership
-    return new Response(JSON.stringify({ ok: true, room }), { status: 200 });
-  } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
-  }
-}
+    const { data, error } = await supabase.rpc("join_room", {
+        p_room_id: room_id,
+        p_lat: lat,
+        p_lng: lng,
+        p_accuracy_m: accuracy_m ?? 9999,
+    });
+
+    if (error) return err("join_failed", 400, { message: error.message });
+
+    return json({ ok: true, data });
+});

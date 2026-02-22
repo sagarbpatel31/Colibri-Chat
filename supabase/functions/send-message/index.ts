@@ -1,20 +1,25 @@
-import { getSupabase } from '../_shared/supabase';
+import { supabaseClient } from "../_shared/supabase.ts";
+import { json, err } from "../_shared/utils.ts";
 
-export default async function handler(req: Request) {
-  try {
-    const { roomId, senderId, content } = await req.json();
-    const { supabase } = getSupabase();
+Deno.serve(async (req) => {
+    if (req.method !== "POST") return err("method_not_allowed", 405);
 
-    const { data, error } = await supabase
-      .from('messages')
-      .insert([{ room_id: roomId, sender_id: senderId, content }])
-      .select()
-      .single();
+    const supabase = supabaseClient(req);
+    const { room_id, text, lat, lng, accuracy_m } = await req.json().catch(() => ({}));
 
-    if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    if (!room_id || typeof text !== "string" || typeof lat !== "number" || typeof lng !== "number") {
+        return err("invalid_payload");
+    }
 
-    return new Response(JSON.stringify({ ok: true, message: data }), { status: 200 });
-  } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
-  }
-}
+    const { data, error } = await supabase.rpc("send_message", {
+        p_room_id: room_id,
+        p_text: text,
+        p_lat: lat,
+        p_lng: lng,
+        p_accuracy_m: accuracy_m ?? 9999,
+    });
+
+    if (error) return err("send_failed", 400, { message: error.message });
+
+    return json({ ok: true, data });
+});
