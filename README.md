@@ -9,7 +9,7 @@ This repo contains:
 - Supabase Edge Functions (thin wrappers) for join/heartbeat/send-message
 - Docs/specs to drive a coding agent (Claude Code/Codex) to build the mobile client
 
-> Notes aligned with the product concept: proximity rooms, ephemeral messages, presence-based UI (grey when sender is no longer nearby), strict safety & privacy constraints. :contentReference[oaicite:1]{index=1}
+> Notes aligned with the product concept: proximity rooms, ephemeral messages, presence-based UI (grey when sender is no longer nearby), strict safety & privacy constraints. 
 
 ---
 
