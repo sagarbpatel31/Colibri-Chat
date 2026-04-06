@@ -1,6 +1,7 @@
 import { Session } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { getCurrentLocation, GeoLocation } from '../lib/location';
+import { getCurrentLocation, getPermissionStatus, GeoLocation } from '../lib/location';
 import { supabase } from '../lib/supabase';
 
 export type RoomSession = {
@@ -13,6 +14,8 @@ type HiddenByRoom = Record<string, Record<string, true>>;
 type AppContextValue = {
   session: Session | null;
   ensureSession: () => Promise<void>;
+  ageVerified: boolean | null;
+  setAgeVerified: (value: boolean) => void;
   locationPermission: boolean | null;
   setLocationPermission: (value: boolean) => void;
   lastLocation: GeoLocation | null;
@@ -25,8 +28,11 @@ type AppContextValue = {
 
 const AppContext = createContext<AppContextValue | undefined>(undefined);
 
+const AGE_VERIFIED_KEY = 'colibri_age_verified';
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
+  const [ageVerified, setAgeVerifiedState] = useState<boolean | null>(null);
   const [locationPermission, setLocationPermission] = useState<boolean | null>(null);
   const [lastLocation, setLastLocation] = useState<GeoLocation | null>(null);
   const [currentRoom, setCurrentRoom] = useState<RoomSession | null>(null);
@@ -57,6 +63,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     initAuth();
 
+    // Check age verification
+    AsyncStorage.getItem(AGE_VERIFIED_KEY).then((val) => {
+      if (active) setAgeVerifiedState(val === 'true');
+    });
+
+    // Check location permission on startup
+    getPermissionStatus().then((status) => {
+      if (active) setLocationPermission(status === 'granted');
+    });
+
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (!active) return;
       setSession(nextSession);
@@ -66,6 +82,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       active = false;
       listener?.subscription?.unsubscribe();
     };
+  }, []);
+
+  const setAgeVerified = useCallback((value: boolean) => {
+    setAgeVerifiedState(value);
+    AsyncStorage.setItem(AGE_VERIFIED_KEY, value ? 'true' : 'false');
   }, []);
 
   const ensureSession = useCallback(async () => {
@@ -105,6 +126,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     () => ({
       session,
       ensureSession,
+      ageVerified,
+      setAgeVerified,
       locationPermission,
       setLocationPermission,
       lastLocation,
@@ -117,6 +140,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [
       session,
       ensureSession,
+      ageVerified,
+      setAgeVerified,
       locationPermission,
       lastLocation,
       refreshLocation,

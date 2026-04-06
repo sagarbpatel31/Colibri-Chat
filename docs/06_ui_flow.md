@@ -35,3 +35,6 @@
 - show “accuracy low” and “outside geofence” clearly
 - never show exact lat/lng publicly
 - no user profiles in v0
+
+
+### Interesting events or shows nearby - it should detect automatically 

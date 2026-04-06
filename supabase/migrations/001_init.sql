@@ -210,9 +210,9 @@ create or replace function public.join_room(
   p_accuracy_m integer
 )
 returns table (
-  room_id uuid,
-  user_id uuid,
-  alias text
+  out_room_id uuid,
+  out_user_id uuid,
+  out_alias text
 )
 language plpgsql
 security definer
@@ -233,7 +233,7 @@ begin
     raise exception 'invalid_accuracy';
   end if;
 
-  select * into v_room from public.rooms where id = p_room_id;
+  select * into v_room from public.rooms where rooms.id = p_room_id;
   if not found then
     raise exception 'room_not_found';
   end if;
@@ -253,15 +253,15 @@ begin
   end if;
 
   -- generate alias per room (deterministic-ish but non-identifying)
-  v_alias := 'User-' || substring(encode(digest(v_user::text || p_room_id::text, 'sha256'), 'hex') from 1 for 6);
+  v_alias := 'User-' || substring(md5(v_user::text || p_room_id::text) from 1 for 6);
 
   insert into public.room_members(room_id, user_id, role, alias, last_seen_at, last_location, last_accuracy_m, is_present)
   values (p_room_id, v_user, 'member', v_alias, now(), v_pt, p_accuracy_m, true)
   on conflict (room_id, user_id)
   do update set
-    last_seen_at = excluded.last_seen_at,
-    last_location = excluded.last_location,
-    last_accuracy_m = excluded.last_accuracy_m,
+    last_seen_at = now(),
+    last_location = v_pt,
+    last_accuracy_m = p_accuracy_m,
     is_present = true;
 
   return query
@@ -279,8 +279,8 @@ create or replace function public.heartbeat(
   p_accuracy_m integer
 )
 returns table (
-  room_id uuid,
-  user_id uuid,
+  out_room_id uuid,
+  out_user_id uuid,
   is_present boolean,
   distance_m double precision
 )
@@ -299,7 +299,7 @@ begin
     raise exception 'not_authenticated';
   end if;
 
-  select * into v_room from public.rooms where id = p_room_id;
+  select * into v_room from public.rooms where rooms.id = p_room_id;
   if not found then
     raise exception 'room_not_found';
   end if;
@@ -307,15 +307,15 @@ begin
   v_pt := st_setsrid(st_makepoint(p_lng, p_lat), 4326)::geography;
   v_dist := st_distance(v_room.center, v_pt);
 
-  v_present := (v_dist <= (v_room.radius_m + v_room.tolerance_m)) and (p_accuracy_m <= 25);
+  v_present := (v_dist <= (v_room.radius_m + v_room.tolerance_m)) and (p_accuracy_m <= 100);
 
-  update public.room_members
+  update public.room_members rm
   set
     last_seen_at = now(),
     last_location = v_pt,
     last_accuracy_m = p_accuracy_m,
     is_present = v_present
-  where room_id = p_room_id and user_id = v_user;
+  where rm.room_id = p_room_id and rm.user_id = v_user;
 
   return query select p_room_id, v_user, v_present, v_dist;
 end;
@@ -332,9 +332,9 @@ create or replace function public.send_message(
   p_accuracy_m integer
 )
 returns table (
-  message_id uuid,
-  created_at timestamptz,
-  expires_at timestamptz
+  out_message_id uuid,
+  out_created_at timestamptz,
+  out_expires_at timestamptz
 )
 language plpgsql
 security definer
@@ -364,18 +364,17 @@ begin
   end if;
 
   -- fetch room + member
-  select * into v_room from public.rooms where id = p_room_id;
+  select * into v_room from public.rooms where rooms.id = p_room_id;
   if not found then
     raise exception 'room_not_found';
   end if;
 
-  select * into v_member from public.room_members where room_id = p_room_id and user_id = v_user;
+  select * into v_member from public.room_members rm where rm.room_id = p_room_id and rm.user_id = v_user;
   if not found then
     raise exception 'not_a_member';
   end if;
 
   if v_member.is_shadow_muted then
-    -- silently accept but do not broadcast: insert moderation event and return fake id
     insert into public.moderation_events(room_id, user_id, event_type, payload, expires_at)
     values (p_room_id, v_user, 'shadow_mute', jsonb_build_object('action','blocked_send'), v_now + interval '30 days');
     raise exception 'shadow_muted';
@@ -392,7 +391,7 @@ begin
   v_pt := st_setsrid(st_makepoint(p_lng, p_lat), 4326)::geography;
   v_dist := st_distance(v_room.center, v_pt);
 
-  if p_accuracy_m > 25 then
+  if p_accuracy_m > 100 then
     raise exception 'low_accuracy';
   end if;
 
@@ -401,9 +400,9 @@ begin
   end if;
 
   -- rate limit (1 msg / 5 sec per user per room)
-  select max(created_at) into v_last_msg
-  from public.messages
-  where room_id = p_room_id and user_id = v_user;
+  select max(m.created_at) into v_last_msg
+  from public.messages m
+  where m.room_id = p_room_id and m.user_id = v_user;
 
   if v_last_msg is not null and v_last_msg > (v_now - interval '5 seconds') then
     raise exception 'rate_limited';
@@ -426,7 +425,6 @@ begin
   if v_room.room_type = 'neighborhood' then
     v_expires := v_now + interval '60 minutes';
   else
-    -- event
     v_expires := least(v_now + interval '60 minutes', v_room.ends_at);
   end if;
 
@@ -447,8 +445,8 @@ create or replace function public.report_message(
   p_reason text
 )
 returns table (
-  report_id uuid,
-  shadow_muted boolean
+  out_report_id uuid,
+  out_shadow_muted boolean
 )
 language plpgsql
 security definer
@@ -467,12 +465,12 @@ begin
   end if;
 
   -- must be member to report
-  if not exists (select 1 from public.room_members where room_id = p_room_id and user_id = v_user) then
+  if not exists (select 1 from public.room_members rm where rm.room_id = p_room_id and rm.user_id = v_user) then
     raise exception 'not_a_member';
   end if;
 
   -- find target user
-  select user_id into v_target_user from public.messages where id = p_message_id and room_id = p_room_id;
+  select msg.user_id into v_target_user from public.messages msg where msg.id = p_message_id and msg.room_id = p_room_id;
   if v_target_user is null then
     raise exception 'message_not_found';
   end if;
@@ -495,9 +493,9 @@ begin
     and r.created_at >= (v_now - interval '10 minutes');
 
   if v_count >= 3 then
-    update public.room_members
+    update public.room_members rm2
     set is_shadow_muted = true
-    where room_id = p_room_id and user_id = v_target_user;
+    where rm2.room_id = p_room_id and rm2.user_id = v_target_user;
 
     insert into public.moderation_events(room_id, user_id, event_type, payload, expires_at)
     values (p_room_id, v_target_user, 'shadow_mute',

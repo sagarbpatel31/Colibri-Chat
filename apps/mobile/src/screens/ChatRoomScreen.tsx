@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -13,6 +15,8 @@ import { useApp } from '../context/AppContext';
 import { startHeartbeatLoop } from '../lib/presence';
 import { sendMessage } from '../lib/rpc';
 import { supabase } from '../lib/supabase';
+import { sendLocalNotification } from '../lib/notifications';
+import { useScreenProtection } from '../lib/screenProtection';
 import { RootStackParamList } from '../types/navigation';
 
 export type ChatRoomProps = NativeStackScreenProps<RootStackParamList, 'ChatRoom'>;
@@ -28,6 +32,8 @@ type Message = {
   status: string;
 };
 
+import { relativeTime } from '../lib/time';
+
 type PresenceMap = Record<string, boolean>;
 
 const SEND_ERROR_COPY: Record<string, string> = {
@@ -41,11 +47,12 @@ const SEND_ERROR_COPY: Record<string, string> = {
   message_too_long: 'Message must be 200 characters or less.',
   empty_message: 'Message cannot be empty.',
   not_a_member: 'You are no longer a member of this room.',
+  user_timed_out: 'You are temporarily restricted from posting due to violations.',
 };
 
 export default function ChatRoomScreen({ navigation, route }: ChatRoomProps) {
   const { roomId, roomName } = route.params;
-  const { currentRoom, ensureSession, refreshLocation, session, isMessageHidden } = useApp();
+  const { currentRoom, setCurrentRoom, ensureSession, refreshLocation, session, isMessageHidden } = useApp();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [composer, setComposer] = useState('');
@@ -54,17 +61,35 @@ export default function ChatRoomScreen({ navigation, route }: ChatRoomProps) {
     'low_accuracy' | 'outside_geofence' | 'not_present' | null
   >(null);
   const [presenceMap, setPresenceMap] = useState<PresenceMap>({});
+  const flatListRef = useRef<FlatList<Message>>(null);
+
+  useScreenProtection();
+
+  // Clear room state when leaving
+  useEffect(() => {
+    return () => setCurrentRoom(null);
+  }, [setCurrentRoom]);
+
+  const presentCount = useMemo(
+    () => Object.values(presenceMap).filter(Boolean).length,
+    [presenceMap]
+  );
 
   useLayoutEffect(() => {
     navigation.setOptions({
       title: roomName,
       headerRight: () => (
-        <Pressable onPress={() => navigation.navigate('Settings')}>
-          <Text style={styles.headerLink}>Settings</Text>
-        </Pressable>
+        <View style={styles.headerRight}>
+          {presentCount > 0 ? (
+            <Text style={styles.headerPresence}>{presentCount} here</Text>
+          ) : null}
+          <Pressable onPress={() => navigation.navigate('Settings')}>
+            <Text style={styles.headerLink}>Settings</Text>
+          </Pressable>
+        </View>
       ),
     });
-  }, [navigation, roomName]);
+  }, [navigation, roomName, presentCount]);
 
   const handleBanner = useCallback((message: string, sticky = false) => {
     setBanner(message);
@@ -89,21 +114,19 @@ export default function ChatRoomScreen({ navigation, route }: ChatRoomProps) {
     setLoading(true);
     try {
       await ensureSession();
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('room_id', roomId)
-        .eq('status', 'active')
-        .gt('expires_at', new Date().toISOString())
-        .order('created_at', { ascending: false })
-        .limit(50);
+      const { data, error } = await supabase.rpc('get_room_messages', {
+        p_room_id: roomId,
+        p_limit: 50,
+      });
 
       if (error) {
+        console.error('[LoadMessages] error:', JSON.stringify(error));
         handleBanner('Unable to load messages.');
         setMessages([]);
       } else {
+        console.log('[LoadMessages] loaded', data?.length ?? 0, 'messages');
         const sorted = (data ?? []).slice().sort(
-          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          (a: Message, b: Message) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         );
         setMessages(sorted as Message[]);
       }
@@ -144,9 +167,18 @@ export default function ChatRoomScreen({ navigation, route }: ChatRoomProps) {
           if (!record?.expires_at) return;
           if (new Date(record.expires_at).getTime() <= Date.now()) return;
           upsertMessages([record]);
+          // Notify for messages from other users
+          if (record.user_id !== session?.user?.id) {
+            sendLocalNotification(record.alias, record.text);
+          }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          // Reload messages on reconnect after error
+          loadMessages();
+        }
+      });
 
     const memberChannel = supabase
       .channel(`room:${roomId}:members`)
@@ -159,13 +191,17 @@ export default function ChatRoomScreen({ navigation, route }: ChatRoomProps) {
           setPresenceMap((prev) => ({ ...prev, [record.user_id]: record.is_present }));
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          loadPresence();
+        }
+      });
 
     return () => {
       supabase.removeChannel(messageChannel);
       supabase.removeChannel(memberChannel);
     };
-  }, [roomId, upsertMessages]);
+  }, [roomId, upsertMessages, loadMessages, loadPresence]);
 
   useEffect(() => {
     if (!roomId) return undefined;
@@ -178,7 +214,7 @@ export default function ChatRoomScreen({ navigation, route }: ChatRoomProps) {
           return;
         }
 
-        if (location.accuracyM > 25) {
+        if (location.accuracyM > 100) {
           setPostingDisabledReason('low_accuracy');
         } else {
           setPostingDisabledReason('outside_geofence');
@@ -192,10 +228,31 @@ export default function ChatRoomScreen({ navigation, route }: ChatRoomProps) {
     return stop;
   }, [handleBanner, roomId]);
 
+  // Sweep expired messages every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMessages((prev) => {
+        const now = Date.now();
+        const filtered = prev.filter((msg) => new Date(msg.expires_at).getTime() > now);
+        return filtered.length === prev.length ? prev : filtered;
+      });
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   const visibleMessages = useMemo(
     () => messages.filter((message) => !isMessageHidden(roomId, message.id)),
     [messages, isMessageHidden, roomId]
   );
+
+  // Auto-scroll to bottom when new messages arrive
+  const prevMessageCount = useRef(0);
+  useEffect(() => {
+    if (visibleMessages.length > prevMessageCount.current) {
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    }
+    prevMessageCount.current = visibleMessages.length;
+  });
 
   const handleSend = async () => {
     if (!composer.trim()) {
@@ -268,7 +325,10 @@ export default function ChatRoomScreen({ navigation, route }: ChatRoomProps) {
     const mutedStyle = !isPresent ? styles.messageMuted : null;
     return (
       <Pressable onLongPress={() => handleReport(item)} style={styles.messageRow}>
-        <Text style={[styles.messageAlias, mutedStyle]}>{item.alias}</Text>
+        <View style={styles.messageHeader}>
+          <Text style={[styles.messageAlias, mutedStyle]}>{item.alias}</Text>
+          <Text style={[styles.messageTime, mutedStyle]}>{relativeTime(item.created_at)}</Text>
+        </View>
         <Text style={[styles.messageText, mutedStyle]}>{item.text}</Text>
       </Pressable>
     );
@@ -284,14 +344,32 @@ export default function ChatRoomScreen({ navigation, route }: ChatRoomProps) {
     : banner;
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
       {bannerCopy ? <Text style={styles.banner}>{bannerCopy}</Text> : null}
       {loading ? <ActivityIndicator /> : null}
       <FlatList
+        ref={flatListRef}
         data={visibleMessages}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        contentContainerStyle={styles.messages}
+        style={styles.messageList}
+        contentContainerStyle={[
+          styles.messages,
+          visibleMessages.length === 0 && !loading ? styles.emptyList : null,
+        ]}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          !loading ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyTitle}>No messages yet</Text>
+              <Text style={styles.emptyBody}>Be the first to say something.</Text>
+            </View>
+          ) : null
+        }
       />
       <View style={styles.composer}>
         <TextInput
@@ -302,6 +380,9 @@ export default function ChatRoomScreen({ navigation, route }: ChatRoomProps) {
           editable={!composerDisabled}
           maxLength={200}
           multiline
+          returnKeyType="send"
+          blurOnSubmit={false}
+          onSubmitEditing={handleSend}
         />
         <View style={styles.composerFooter}>
           <Text style={styles.count}>{composer.length}/200</Text>
@@ -318,7 +399,7 @@ export default function ChatRoomScreen({ navigation, route }: ChatRoomProps) {
           </Pressable>
         </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -342,9 +423,18 @@ const styles = StyleSheet.create({
   messageRow: {
     marginBottom: 12,
   },
+  messageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
   messageAlias: {
     fontWeight: '600',
-    marginBottom: 4,
+  },
+  messageTime: {
+    fontSize: 12,
+    color: '#9ca3af',
+    marginLeft: 8,
   },
   messageText: {
     fontSize: 16,
@@ -352,18 +442,50 @@ const styles = StyleSheet.create({
   messageMuted: {
     color: '#9ca3af',
   },
+  messageList: {
+    flex: 1,
+  },
+  emptyList: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#9ca3af',
+    marginBottom: 4,
+  },
+  emptyBody: {
+    fontSize: 14,
+    color: '#9ca3af',
+  },
   composer: {
     borderTopWidth: 1,
     borderColor: '#eee',
-    padding: 12,
+    padding: 16,
+    backgroundColor: '#f8f9fa',
   },
   input: {
     minHeight: 44,
-    borderRadius: 10,
-    borderWidth: 1,
+    maxHeight: 100,
+    borderRadius: 12,
+    borderWidth: 1.5,
     borderColor: '#ddd',
-    padding: 10,
+    padding: 12,
     backgroundColor: '#fff',
+    fontSize: 16,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   inputDisabled: {
     backgroundColor: '#f5f5f5',
@@ -394,6 +516,16 @@ const styles = StyleSheet.create({
   sendText: {
     color: '#fff',
     fontWeight: '600',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerPresence: {
+    fontSize: 13,
+    color: '#1d8f5f',
+    fontWeight: '500',
   },
   headerLink: {
     color: '#1d4ed8',

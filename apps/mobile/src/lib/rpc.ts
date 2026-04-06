@@ -14,7 +14,8 @@ export type RpcErrorCode =
   | 'content_blocked'
   | 'shadow_muted'
   | 'not_a_member'
-  | 'message_not_found';
+  | 'message_not_found'
+  | 'user_timed_out';
 
 const KNOWN_ERRORS = new Set<RpcErrorCode>([
   'not_authenticated',
@@ -31,6 +32,7 @@ const KNOWN_ERRORS = new Set<RpcErrorCode>([
   'shadow_muted',
   'not_a_member',
   'message_not_found',
+  'user_timed_out',
 ]);
 
 export type RpcError = {
@@ -55,6 +57,7 @@ export type NearbyRoom = {
   ends_at: string | null;
   distance_m: number;
   is_active: boolean;
+  member_count: number;
 };
 
 export async function getNearbyRooms(params: {
@@ -92,7 +95,11 @@ export async function joinRoom(params: {
     p_accuracy_m: params.accuracyM,
   });
 
-  return { data: data?.[0] ?? null, error: parseRpcError(error) };
+  const row = data?.[0] ?? null;
+  const mapped: JoinRoomResult | null = row
+    ? { room_id: row.out_room_id ?? row.room_id, user_id: row.out_user_id ?? row.user_id, alias: row.out_alias ?? row.alias }
+    : null;
+  return { data: mapped, error: parseRpcError(error) };
 }
 
 export type HeartbeatResult = {
@@ -115,7 +122,11 @@ export async function heartbeat(params: {
     p_accuracy_m: params.accuracyM,
   });
 
-  return { data: data?.[0] ?? null, error: parseRpcError(error) };
+  const hbRow = data?.[0] ?? null;
+  const hbMapped: HeartbeatResult | null = hbRow
+    ? { room_id: hbRow.out_room_id ?? hbRow.room_id, user_id: hbRow.out_user_id ?? hbRow.user_id, is_present: hbRow.is_present, distance_m: hbRow.distance_m }
+    : null;
+  return { data: hbMapped, error: parseRpcError(error) };
 }
 
 export type SendMessageResult = {
@@ -139,6 +150,38 @@ export async function sendMessage(params: {
     p_accuracy_m: params.accuracyM,
   });
 
+  const smRow = data?.[0] ?? null;
+  const smMapped: SendMessageResult | null = smRow
+    ? { message_id: smRow.out_message_id ?? smRow.message_id, created_at: smRow.out_created_at ?? smRow.created_at, expires_at: smRow.out_expires_at ?? smRow.expires_at }
+    : null;
+  return { data: smMapped, error: parseRpcError(error) };
+}
+
+export type CreateRoomResult = {
+  room_id: string;
+  name: string;
+  room_type: string;
+};
+
+export async function createRoom(params: {
+  name: string;
+  roomType: 'neighborhood' | 'event';
+  lat: number;
+  lng: number;
+  radiusM?: number;
+  startsAt?: string;
+  endsAt?: string;
+}): Promise<{ data: CreateRoomResult | null; error: RpcError | null }> {
+  const { data, error } = await supabase.rpc('create_room', {
+    p_name: params.name,
+    p_room_type: params.roomType,
+    p_lat: params.lat,
+    p_lng: params.lng,
+    p_radius_m: params.radiusM ?? 200,
+    p_starts_at: params.startsAt ?? null,
+    p_ends_at: params.endsAt ?? null,
+  });
+
   return { data: data?.[0] ?? null, error: parseRpcError(error) };
 }
 
@@ -158,5 +201,9 @@ export async function reportMessage(params: {
     p_reason: params.reason,
   });
 
-  return { data: data?.[0] ?? null, error: parseRpcError(error) };
+  const rpRow = data?.[0] ?? null;
+  const rpMapped: ReportMessageResult | null = rpRow
+    ? { report_id: rpRow.out_report_id ?? rpRow.report_id, shadow_muted: rpRow.out_shadow_muted ?? rpRow.shadow_muted }
+    : null;
+  return { data: rpMapped, error: parseRpcError(error) };
 }

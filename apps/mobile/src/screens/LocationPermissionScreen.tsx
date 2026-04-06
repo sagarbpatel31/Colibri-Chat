@@ -1,16 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Button, StyleSheet, Text, View } from 'react-native';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { requestLocationPermission, getPermissionStatus } from '../lib/location';
 import { useApp } from '../context/AppContext';
-import { RootStackParamList } from '../types/navigation';
 
-export type LocationPermissionProps = NativeStackScreenProps<
-  RootStackParamList,
-  'LocationPermission'
->;
-
-export default function LocationPermissionScreen({ navigation }: LocationPermissionProps) {
+export default function LocationPermissionScreen() {
   const { setLocationPermission, refreshLocation } = useApp();
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
@@ -19,11 +12,8 @@ export default function LocationPermissionScreen({ navigation }: LocationPermiss
     if (status === 'granted') {
       setLocationPermission(true);
       await refreshLocation();
-      navigation.replace('NearbyRooms');
-    } else {
-      setLocationPermission(false);
     }
-  }, [navigation, refreshLocation, setLocationPermission]);
+  }, [refreshLocation, setLocationPermission]);
 
   useEffect(() => {
     checkStatus();
@@ -34,9 +24,7 @@ export default function LocationPermissionScreen({ navigation }: LocationPermiss
     if (status === 'granted') {
       setLocationPermission(true);
       await refreshLocation();
-      navigation.replace('NearbyRooms');
     } else {
-      setLocationPermission(false);
       setStatusMessage('Location is required to discover nearby rooms.');
     }
   };
@@ -49,7 +37,12 @@ export default function LocationPermissionScreen({ navigation }: LocationPermiss
         discover rooms and verify you are inside the geofence.
       </Text>
       {statusMessage ? <Text style={styles.error}>{statusMessage}</Text> : null}
-      <Button title="Allow location" onPress={handleRequest} />
+      <Pressable
+        style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+        onPress={handleRequest}
+      >
+        <Text style={styles.buttonText}>Allow location</Text>
+      </Pressable>
     </View>
   );
 }
@@ -75,5 +68,19 @@ const styles = StyleSheet.create({
   error: {
     color: '#c0392b',
     marginBottom: 16,
+  },
+  button: {
+    backgroundColor: '#111827',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  buttonPressed: {
+    opacity: 0.8,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
