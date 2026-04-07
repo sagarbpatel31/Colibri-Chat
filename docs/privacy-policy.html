@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Colibri Chat - Privacy Policy</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1a1a1a; line-height: 1.7; max-width: 720px; margin: 0 auto; padding: 24px 20px 60px; background: #fff; }
+    h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+    .subtitle { color: #6b7280; font-size: 14px; margin-bottom: 32px; }
+    h2 { font-size: 20px; font-weight: 600; margin-top: 32px; margin-bottom: 12px; }
+    p, li { font-size: 15px; color: #374151; margin-bottom: 12px; }
+    ul { padding-left: 20px; margin-bottom: 16px; }
+    li { margin-bottom: 6px; }
+    .highlight { background: #f3f4f6; border-radius: 8px; padding: 16px; margin: 16px 0; }
+    .highlight p { margin-bottom: 0; }
+    a { color: #2563eb; }
+    footer { margin-top: 48px; padding-top: 24px; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 13px; }
+  </style>
+</head>
+<body>
+
+<h1>Privacy Policy</h1>
+<p class="subtitle">Colibri Chat &mdash; Last updated: April 2026</p>
+
+<p>Colibri Chat ("the App") is a proximity-based, ephemeral chat application. We are committed to protecting your privacy. This policy explains what data we collect, how we use it, and your rights.</p>
+
+<div class="highlight">
+  <p><strong>The short version:</strong> We collect your location to make the app work. We don't create accounts, don't store personal info, and all messages automatically delete after 60 minutes.</p>
+</div>
+
+<h2>1. Data We Collect</h2>
+
+<p><strong>Location Data</strong></p>
+<ul>
+  <li>We collect your device's GPS coordinates while you use the App.</li>
+  <li>Location is used solely to discover nearby chat rooms and verify you are within a room's geofence boundary.</li>
+  <li>Location data is updated every 25 seconds while you are in a chat room (heartbeat).</li>
+  <li>We do not track your location history or movements over time.</li>
+</ul>
+
+<p><strong>Anonymous Identifier</strong></p>
+<ul>
+  <li>When you first open the App, an anonymous session is created automatically. No email, phone number, name, or password is required.</li>
+  <li>A random anonymous ID is generated and stored locally on your device.</li>
+  <li>Within each chat room, you are assigned a pseudonymous alias (e.g., "User-a3f1b2") derived from a hash. This alias is different in every room.</li>
+</ul>
+
+<p><strong>Messages</strong></p>
+<ul>
+  <li>Message text you send is stored temporarily on our servers.</li>
+  <li>All messages automatically expire and are deleted after 60 minutes (neighborhood rooms) or at the end of the event (event rooms).</li>
+  <li>We do not archive or back up expired messages.</li>
+</ul>
+
+<h2>2. Data We Do NOT Collect</h2>
+<ul>
+  <li>No name, email address, phone number, or social media handles</li>
+  <li>No photos, contacts, or files from your device</li>
+  <li>No browsing history or app usage analytics</li>
+  <li>No advertising identifiers or tracking pixels</li>
+  <li>No data is sold to or shared with advertisers</li>
+</ul>
+
+<h2>3. How We Use Your Data</h2>
+<ul>
+  <li><strong>Location:</strong> To show you nearby rooms, verify geofence boundaries, and determine your presence status in a room.</li>
+  <li><strong>Anonymous ID:</strong> To associate you with your messages within a session and enforce rate limits and moderation rules.</li>
+  <li><strong>Messages:</strong> To display them to other users in the same room until they expire.</li>
+</ul>
+
+<h2>4. Content Moderation</h2>
+<ul>
+  <li>Messages are automatically scanned for prohibited content including personal information (emails, phone numbers), explicit content, hate speech, threats, and spam.</li>
+  <li>Messages containing prohibited content are blocked before being sent.</li>
+  <li>Users who repeatedly violate content rules may receive temporary posting restrictions (15 minutes to 24 hours).</li>
+  <li>Users can report messages. If a message receives 3 or more reports within 10 minutes, the sender is automatically restricted.</li>
+  <li>Moderation events are logged for safety and retained for 30 days.</li>
+</ul>
+
+<h2>5. Data Storage and Security</h2>
+<ul>
+  <li>Data is stored on Supabase (hosted on AWS) with encryption at rest and in transit.</li>
+  <li>Messages are ephemeral and automatically deleted after their TTL expires.</li>
+  <li>We use Row Level Security (RLS) policies to ensure users can only access data in rooms they belong to.</li>
+  <li>All server-side operations use security-hardened stored procedures.</li>
+</ul>
+
+<h2>6. Data Retention</h2>
+<ul>
+  <li><strong>Messages:</strong> Deleted automatically after 60 minutes or at event end.</li>
+  <li><strong>Room membership:</strong> Retained while the room exists. Event rooms are deleted 24 hours after they end.</li>
+  <li><strong>Moderation logs:</strong> Retained for 30 days for safety review, then deleted.</li>
+  <li><strong>Your anonymous session:</strong> Stored locally on your device. Clearing app data resets your identity.</li>
+</ul>
+
+<h2>7. Third-Party Services</h2>
+<p>We use the following third-party services:</p>
+<ul>
+  <li><strong>Supabase</strong> (database, authentication, real-time messaging) &mdash; <a href="https://supabase.com/privacy">Privacy Policy</a></li>
+  <li><strong>Expo / EAS</strong> (app build and distribution) &mdash; <a href="https://expo.dev/privacy">Privacy Policy</a></li>
+</ul>
+<p>We do not use any analytics, advertising, or tracking SDKs.</p>
+
+<h2>8. Children's Privacy</h2>
+<p>Colibri Chat is intended for users aged 18 and older. We do not knowingly collect data from anyone under 18. The App includes an age verification gate on first launch. If we learn that a user under 18 has used the App, we will take steps to delete their data.</p>
+
+<h2>9. Your Rights</h2>
+<ul>
+  <li><strong>Access:</strong> Since we don't collect personal information, there is minimal data to access. Your anonymous ID is stored only on your device.</li>
+  <li><strong>Deletion:</strong> Uninstalling the App or clearing app data removes your local session. Messages auto-delete after their TTL. You may contact us to request deletion of any moderation logs associated with your anonymous ID.</li>
+  <li><strong>Opt-out:</strong> You can stop using the App at any time. Revoking location permission will prevent the App from functioning.</li>
+</ul>
+
+<h2>10. Changes to This Policy</h2>
+<p>We may update this Privacy Policy from time to time. The "Last updated" date at the top of this page will be revised. Continued use of the App after changes constitutes acceptance of the updated policy.</p>
+
+<h2>11. Contact Us</h2>
+<p>If you have questions about this Privacy Policy or your data, contact us at:</p>
+<p><strong>Email:</strong> <!-- REPLACE WITH YOUR EMAIL --> support@colibrichat.app</p>
+
+<footer>
+  <p>&copy; 2026 Colibri Chat. All rights reserved.</p>
+</footer>
+
+</body>
+</html>
