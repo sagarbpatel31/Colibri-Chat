@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Colibri Chat",
-    "slug": "colibri-chat",
+    "slug": "colibri-chat-v2",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -15,11 +15,14 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.colibrichat.app",
-      "buildNumber": "1",
+      "buildNumber": "3",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Colibri Chat uses your location to find nearby rooms and verify you are within the geofence.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Colibri Chat uses your location to maintain your presence in chat rooms.",
-        "UIBackgroundModes": ["location", "fetch"]
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ]
       },
       "config": {
         "usesNonExemptEncryption": false
@@ -35,7 +38,9 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE"
+        "VIBRATE",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ],
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
@@ -55,13 +60,13 @@
         {
           "sounds": []
         }
-      ],
-      ["expo-screen-capture", {}]
+      ]
     ],
     "extra": {
       "eas": {
-        "projectId": ""
+        "projectId": "88f3cbf1-b41e-4fc6-8a07-ce4ac98a6193"
       }
-    }
+    },
+    "owner": "sagarp31"
   }
 }
